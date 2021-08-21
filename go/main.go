@@ -25,6 +25,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/labstack/gommon/log"
+	"golang.org/x/sync/singleflight"
 )
 
 const (
@@ -50,6 +51,8 @@ var (
 	jiaJWTSigningKey *ecdsa.PublicKey
 
 	postIsuConditionTargetBaseURL string // JIAへのactivate時に登録する，ISUがconditionを送る先のURL
+
+	insIsuCondArgsCh = make(chan insertIsuConditionsArgs, 1024)
 )
 
 type Config struct {
@@ -220,7 +223,7 @@ func main() {
 	e.Debug = true
 	e.Logger.SetLevel(log.DEBUG)
 
-	e.Use(middleware.Logger())
+	// e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 
 	e.POST("/initialize", postInitialize)
@@ -254,6 +257,7 @@ func main() {
 		e.Logger.Fatalf("missing: POST_ISUCONDITION_TARGET_BASE_URL")
 		return
 	}
+	go insertIsuConditions(context.Background(), e.Logger, insIsuCondArgsCh)
 
 	serverPort := fmt.Sprintf(":%v", getEnv("SERVER_APP_PORT", "3000"))
 	e.Logger.Fatal(e.Start(serverPort))
@@ -337,6 +341,10 @@ func postInitialize(c echo.Context) error {
 		c.Logger().Errorf("db error : %v", err)
 		return c.NoContent(http.StatusInternalServerError)
 	}
+
+	// reset all
+	isuExistanceCacheGroup = singleflight.Group{}
+	isuExistanceSet = map[string]struct{}{}
 
 	return c.JSON(http.StatusOK, InitializeResponse{
 		Language: "go",
@@ -1177,11 +1185,30 @@ func getTrend(c echo.Context) error {
 
 // POST /api/condition/:jia_isu_uuid
 // ISUからのコンディションを受け取る
+var isuExistanceCacheGroup singleflight.Group
+var isuExistanceSet = map[string]struct{}{}
+
+func checkIsuExists(ctx context.Context, jiaIsuUUID string) (bool, error) {
+	exists, err, _ := isuExistanceCacheGroup.Do(jiaIsuUUID, func() (interface{}, error) {
+		if _, ok := isuExistanceSet[jiaIsuUUID]; ok {
+			return true, nil
+		}
+
+		var count int
+		err := db.GetContext(ctx, &count, "SELECT 1 FROM `isu` WHERE `jia_isu_uuid` = ? LIMIT 1", jiaIsuUUID)
+		if count == 1 {
+			isuExistanceSet[jiaIsuUUID] = struct{}{}
+		}
+		return count == 0, err
+	})
+	return exists.(bool), err
+}
+
 func postIsuCondition(c echo.Context) error {
 	ctx := c.Request().Context()
 
 	// TODO: 一定割合リクエストを落としてしのぐようにしたが、本来は全量さばけるようにすべき
-	dropProbability := 0.9
+	dropProbability := 0.0
 	if rand.Float64() <= dropProbability {
 		c.Logger().Warnf("drop post isu condition request")
 		return c.NoContent(http.StatusAccepted)
@@ -1200,13 +1227,13 @@ func postIsuCondition(c echo.Context) error {
 		return c.String(http.StatusBadRequest, "bad request body")
 	}
 
-	var count int
-	err = db.GetContext(ctx, &count, "SELECT COUNT(*) FROM `isu` WHERE `jia_isu_uuid` = ?", jiaIsuUUID)
+	var exists bool
+	exists, err = checkIsuExists(ctx, jiaIsuUUID)
 	if err != nil {
 		c.Logger().Errorf("db error: %v", err)
 		return c.NoContent(http.StatusInternalServerError)
 	}
-	if count == 0 {
+	if !exists {
 		return c.String(http.StatusNotFound, "not found: isu")
 	}
 
@@ -1217,28 +1244,62 @@ func postIsuCondition(c echo.Context) error {
 		}
 	}
 
-	go insertIsuConditions(context.Background(), c.Logger(), req, jiaIsuUUID)
-
+	insIsuCondArgsCh <- insertIsuConditionsArgs{
+		conditions: req,
+		jiaIsuUUID: jiaIsuUUID,
+	}
+	time.Sleep(60 * time.Millisecond)
 	return c.NoContent(http.StatusAccepted)
 }
 
-func insertIsuConditions(ctx context.Context, logger echo.Logger, conditions []PostIsuConditionRequest, jiaIsuUUID string) {
-	rows := make([]insertIsuRow, len(conditions))
-	for i, cond := range conditions {
-		// 呼び出し元でチェックしているのでここではチェックしない
-		// if !isValidConditionFormat(cond.Condition) {
-		// 	return
-		// }
+type insertIsuConditionsArgs struct {
+	conditions []PostIsuConditionRequest
+	jiaIsuUUID string
+}
 
-		timestamp := time.Unix(cond.Timestamp, 0)
-		rows[i] = insertIsuRow{
-			JIAIsuUUID: jiaIsuUUID,
-			Timestamp:  timestamp,
-			IsSitting:  cond.IsSitting,
-			Condition:  cond.Condition,
-			Message:    cond.Message,
+func insertIsuConditions(ctx context.Context, logger echo.Logger, ch <-chan insertIsuConditionsArgs) {
+	var rows [5000]*insertIsuRow
+	var rowsSize int
+
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case args := <-ch:
+			for _, c := range args.conditions {
+				// 呼び出し元でチェックしているのでここではチェックしない
+				// if !isValidConditionFormat(cond.Condition) {
+				// 	return
+				// }
+
+				timestamp := time.Unix(c.Timestamp, 0)
+				rows[rowsSize] = &insertIsuRow{
+					JIAIsuUUID: args.jiaIsuUUID,
+					Timestamp:  timestamp,
+					IsSitting:  c.IsSitting,
+					Condition:  c.Condition,
+					Message:    c.Message,
+				}
+				rowsSize++
+				if rowsSize == len(rows) {
+					insertIsuConditionDoit(ctx, logger, rows[:])
+					rowsSize = 0
+				}
+			}
+
+		case <-ticker.C:
+			if rowsSize > 0 {
+				insertIsuConditionDoit(ctx, logger, rows[:rowsSize])
+				rowsSize = 0
+			}
+
+		case <-ctx.Done():
+			return
 		}
 	}
+}
+
+func insertIsuConditionDoit(ctx context.Context, logger echo.Logger, rows []*insertIsuRow) {
 	tx, err := db.BeginTxx(ctx, nil)
 	if err != nil {
 		logger.Errorf("insertIsuConditions: failed to begin tx: %v", err)
@@ -1260,6 +1321,7 @@ func insertIsuConditions(ctx context.Context, logger echo.Logger, conditions []P
 	if err := tx.Commit(); err != nil {
 		logger.Errorf("insertIsuConditions: failed to commit: %v", err)
 	}
+	logger.Debugf("flush %d isu condition rows", len(rows))
 }
 
 // ISUのコンディションの文字列がcsv形式になっているか検証
