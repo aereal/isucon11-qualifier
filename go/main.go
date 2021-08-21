@@ -1122,7 +1122,7 @@ func calculateNumericConditionLevels(levelsMap map[string]struct{}) (conditionLe
 		seen[level] = struct{}{}
 	}
 
-	return conditionLevels, nil
+	return conditionLevels
 }
 
 // GET /api/trend
