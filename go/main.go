@@ -1178,6 +1178,12 @@ func postIsuCondition(c echo.Context) error {
 		return c.String(http.StatusBadRequest, "bad request body")
 	}
 
+	for _, cond := range req {
+		if !isValidConditionFormat(cond.Condition) {
+			return c.String(http.StatusBadRequest, "bad request body")
+		}
+	}
+
 	tx, err := db.Beginx()
 	if err != nil {
 		c.Logger().Errorf("db error: %v", err)
@@ -1197,10 +1203,6 @@ func postIsuCondition(c echo.Context) error {
 
 	for _, cond := range req {
 		timestamp := time.Unix(cond.Timestamp, 0)
-
-		if !isValidConditionFormat(cond.Condition) {
-			return c.String(http.StatusBadRequest, "bad request body")
-		}
 
 		_, err = tx.Exec(
 			"INSERT INTO `isu_condition`"+
