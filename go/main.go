@@ -761,15 +761,9 @@ func getIsuGraph(c echo.Context) error {
 	date := time.Unix(datetimeInt64, 0).Truncate(time.Hour)
 
 	ctx := c.Request().Context()
-	tx, err := db.BeginTxx(ctx, nil)
-	if err != nil {
-		c.Logger().Errorf("db error: %v", err)
-		return c.NoContent(http.StatusInternalServerError)
-	}
-	defer tx.Rollback()
 
 	var count int
-	err = tx.GetContext(ctx, &count, "SELECT COUNT(*) FROM `isu` WHERE `jia_user_id` = ? AND `jia_isu_uuid` = ?",
+	err = db.GetContext(ctx, &count, "SELECT COUNT(*) FROM `isu` WHERE `jia_user_id` = ? AND `jia_isu_uuid` = ?",
 		jiaUserID, jiaIsuUUID)
 	if err != nil {
 		c.Logger().Errorf("db error: %v", err)
@@ -778,6 +772,13 @@ func getIsuGraph(c echo.Context) error {
 	if count == 0 {
 		return c.String(http.StatusNotFound, "not found: isu")
 	}
+
+	tx, err := db.BeginTxx(ctx, nil)
+	if err != nil {
+		c.Logger().Errorf("db error: %v", err)
+		return c.NoContent(http.StatusInternalServerError)
+	}
+	defer tx.Rollback()
 
 	res, err := generateIsuGraphResponse(ctx, tx, jiaIsuUUID, date)
 	if err != nil {
