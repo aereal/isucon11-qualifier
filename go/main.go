@@ -1253,7 +1253,7 @@ func postIsuCondition(c echo.Context) error {
 		conditions: req,
 		jiaIsuUUID: jiaIsuUUID,
 	}
-	time.Sleep(30 * time.Millisecond) // 反映タイミングの期待値調整のため30ms待ってからレスポンスを返す
+	time.Sleep(60 * time.Millisecond) // 反映タイミングの期待値調整のため30ms待ってからレスポンスを返す
 	return c.NoContent(http.StatusAccepted)
 }
 
