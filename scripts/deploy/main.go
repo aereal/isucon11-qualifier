@@ -135,7 +135,7 @@ func newDeployTask(target string) task {
 			log.Printf("start deploy to %s", target)
 		}),
 		// 初期データ消えるので --delete 付けていない
-		newSimpleCommandTask("rsync", rsyncArgs("./sql/", fmt.Sprintf("%s:webapp/mysql/", target))...),
+		newSimpleCommandTask("rsync", rsyncArgs("./sql/", fmt.Sprintf("%s:webapp/sql/", target))...),
 		// go.mod消えるので --delete 付けていない
 		newSimpleCommandTask("rsync", rsyncArgs("./go.mod", fmt.Sprintf("%s:webapp/go/", target))...),
 		newSimpleCommandTask("rsync", rsyncArgs("./go.sum", fmt.Sprintf("%s:webapp/go/", target))...),
