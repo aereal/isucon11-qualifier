@@ -1,0 +1,57 @@
+---
+
+- name: download and install pt-query-digest
+  get_url: url=https://percona.com/get/pt-query-digest dest=/usr/bin/pt-query-digest mode=0755
+
+- name: download and install lltsv
+  get_url: url=https://github.com/sonots/lltsv/releases/download/v0.7.0/lltsv_linux_amd64 dest=/usr/bin/lltsv mode=0755
+
+- name: check alp installation status
+  stat:
+    path: /usr/bin/alp
+  register: alp_bin
+- name: download and install alp
+  block:
+    - name: download alp
+      get_url: url=https://github.com/tkuchiki/alp/releases/download/v1.0.6/alp_linux_amd64.zip dest=/tmp/alp_linux_amd64.zip
+    - name: unarchive alp
+      unarchive: src=/tmp/alp_linux_amd64.zip dest=/usr/bin mode=0755 copy=no
+  when: alp_bin.stat.exists == False
+
+- name: check querydigest installation status
+  stat:
+    path: /usr/bin/querydigest
+  register: querydigest_bin
+- name: download and install querydigest
+  block:
+    - name: download querydigest
+      get_url: url=https://github.com/akito0107/querydigest/releases/download/v1.0.2/querydigest_linux_x86_64.tar.gz dest=/tmp/querydigest_linux_amd64.tar.gz
+    - name: unarchive querydigest
+      unarchive: src=/tmp/querydigest_linux_amd64.tar.gz dest=/usr/bin mode=0755 copy=no
+  when: querydigest_bin.stat.exists == False
+
+- name: check go installation status go 1.16
+  stat:
+    path: /opt/go/1.16/go/bin/go
+  register: go116_bin
+
+- name: creates /opt/go/...
+  file: path={{ item }} state=directory mode=0755
+  with_items:
+    - /opt
+    - /opt/go
+    - /opt/go/1.16
+  when: go116_bin.stat.exists == False
+
+- name: download go 1.16
+  get_url: url=https://dl.google.com/go/go1.16.6.linux-amd64.tar.gz dest=/tmp/go1.16.linux-amd64.tar.gz
+  when: go116_bin.stat.exists == False
+- name: unarchive go 1.16
+  unarchive: src=/tmp/go1.16.linux-amd64.tar.gz dest=/opt/go/1.16 mode=0755 copy=no
+  when: go116_bin.stat.exists == False
+
+- name: install tools
+  copy: src=bin/{{ item }} dest=/usr/bin/{{ item }} owner=root group=root mode=0755
+  with_items:
+    - logrotate.pl
+    - restart.sh
