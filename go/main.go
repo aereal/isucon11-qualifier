@@ -1201,20 +1201,32 @@ func postIsuCondition(c echo.Context) error {
 		return c.String(http.StatusNotFound, "not found: isu")
 	}
 
-	tx, err := db.BeginTxx(ctx, nil)
-	if err != nil {
-		c.Logger().Errorf("db error: %v", err)
-		return c.NoContent(http.StatusInternalServerError)
-	}
-	defer tx.Rollback()
-
 	for _, cond := range req {
-		timestamp := time.Unix(cond.Timestamp, 0)
-
+		// 400を返すために先にvalidationだけする
 		if !isValidConditionFormat(cond.Condition) {
 			return c.String(http.StatusBadRequest, "bad request body")
 		}
+	}
 
+	go insertIsuConditions(ctx, c.Logger(), req, jiaIsuUUID)
+
+	return c.NoContent(http.StatusAccepted)
+}
+
+func insertIsuConditions(ctx context.Context, logger echo.Logger, conditions []PostIsuConditionRequest, jiaIsuUUID string) {
+	tx, err := db.BeginTxx(ctx, nil)
+	if err != nil {
+		logger.Errorf("insertIsuConditions: failed to begin tx: %v", err)
+	}
+	defer tx.Rollback()
+
+	for _, cond := range conditions {
+		// 呼び出し元でチェックしているのでここではチェックしない
+		// if !isValidConditionFormat(cond.Condition) {
+		// 	return
+		// }
+
+		timestamp := time.Unix(cond.Timestamp, 0)
 		_, err = tx.ExecContext(
 			ctx,
 			"INSERT INTO `isu_condition`"+
@@ -1222,19 +1234,15 @@ func postIsuCondition(c echo.Context) error {
 				"	VALUES (?, ?, ?, ?, ?)",
 			jiaIsuUUID, timestamp, cond.IsSitting, cond.Condition, cond.Message)
 		if err != nil {
-			c.Logger().Errorf("db error: %v", err)
-			return c.NoContent(http.StatusInternalServerError)
+			logger.Errorf("insertIsuConditions: failed to insert: %v", err)
+			return
 		}
 
 	}
 
-	err = tx.Commit()
-	if err != nil {
-		c.Logger().Errorf("db error: %v", err)
-		return c.NoContent(http.StatusInternalServerError)
+	if err := tx.Commit(); err != nil {
+		logger.Errorf("insertIsuConditions: failed to commit: %v", err)
 	}
-
-	return c.NoContent(http.StatusAccepted)
 }
 
 // ISUのコンディションの文字列がcsv形式になっているか検証
