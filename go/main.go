@@ -1143,7 +1143,7 @@ func getTrend(c echo.Context) error {
 					return c.NoContent(http.StatusInternalServerError)
 				}
 				trendCondition := TrendCondition{
-					ID:        isu.ID,
+					ID:        0,
 					Timestamp: isuLastCondition.Timestamp.Unix(),
 				}
 				switch conditionLevel {
