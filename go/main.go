@@ -687,6 +687,7 @@ func getIsuID(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 
+	c.Response().Header().Set("Cache-Control", "public, max-age=60")
 	return c.JSON(http.StatusOK, res)
 }
 
@@ -718,6 +719,7 @@ func getIsuIcon(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 
+	c.Response().Header().Set("Cache-Control", "public, max-age=60")
 	return c.Blob(http.StatusOK, "", image)
 }
 
