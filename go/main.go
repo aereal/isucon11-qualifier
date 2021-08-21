@@ -687,6 +687,7 @@ func getIsuID(c echo.Context) error {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 
+	c.Response().Header().Set("Cache-Control", "public, max-age=31536000")
 	return c.JSON(http.StatusOK, res)
 }
 
