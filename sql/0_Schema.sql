@@ -26,6 +26,7 @@ CREATE TABLE `isu_condition` (
   `is_dirty` TINYINT(1) AS (`condition` REGEXP 'is_dirty=true') STORED NOT NULL,
   `is_overweight` TINYINT(1) AS (`condition` REGEXP 'is_overweight=true') STORED NOT NULL,
   `is_broken` TINYINT(1) AS (`condition` REGEXP 'is_broken=true') STORED NOT NULL,
+  `condition_level` TINYINT(1) AS (`is_dirty`+`is_overweight`+`is_broken`) STORED NOT NULL,
   KEY `timestamp_desc_jia_isu_uuid_idx` (`timestamp` DESC, `jia_isu_uuid`),
   KEY `timestamp_asc_jia_isu_uuid_idx` (`timestamp`, `jia_isu_uuid`),
   PRIMARY KEY(`id`)
