@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net/url"
 	"os"
 	"os/exec"
 	"path"
@@ -206,14 +205,5 @@ func avatarURL(osUser string) string {
 }
 
 func parseGitHubRepoFromRemoteURL(remote string) (string, error) {
-	cmd := exec.Command("git", "remote", "get-url", remote)
-	out, err := cmd.Output()
-	if err != nil {
-		return "", err
-	}
-	parsed, err := url.Parse(strings.TrimSpace(string(out)))
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSuffix(parsed.Path[1:] /* remove slash prefix */, ".git"), nil
+	return "aereal/isucon11-qualifier", nil
 }
