@@ -20,4 +20,4 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go
       - name: build
-        run: make -C ./webapp/go
+        run: go build -o app ./go
