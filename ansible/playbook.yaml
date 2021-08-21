@@ -11,8 +11,8 @@
     # - include: tasks/06_kernel.yaml # TODO: 悪化することもあるので状況に応じて/バックアップを取ってから
   tags: init
   vars:
-    install_mysql_libs: yes
-    use_community_mysql: &use_community_mysql yes
+    install_mysql_libs: no
+    use_community_mysql: &use_community_mysql no
     mysql_version: &mysql_version 8.0
     mysql_uninstall: &mysql_uninstall no # アップグレードの際はyesにする
 
