@@ -133,6 +133,7 @@ func newDeployTask(target string) task {
 		loggingTask(func(_ context.Context) {
 			log.Printf("start deploy to %s", target)
 		}),
+		newSimpleCommandTask("rsync", rsyncArgs("./env.sh", fmt.Sprintf("%s:env.sh", target))...),
 		// 初期データ消えるので --delete 付けていない
 		newSimpleCommandTask("rsync", rsyncArgs("./sql/", fmt.Sprintf("%s:webapp/sql/", target))...),
 		// go.mod消えるので --delete 付けていない
