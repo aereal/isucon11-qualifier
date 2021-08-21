@@ -491,13 +491,13 @@ func getIsuList(c echo.Context) error {
 		isuIds = append(isuIds, isu.ID)
 	}
 
-	conditionList := []IsuCondition{}
-	sql, params, err := sqlx.In("SELECT * FROM `isu_condition` WHERE `id` IN (SELECT MAX(`id`) FROM `isu_condition` WHERE `jia_isu_uuid` IN (?) GROUP BY `jia_isu_uuid`)", isuIds)
+	query, params, err := sqlx.In("SELECT * FROM `isu_condition` WHERE `id` IN (SELECT MAX(`id`) FROM `isu_condition` WHERE `jia_isu_uuid` IN (?) GROUP BY `jia_isu_uuid`)", isuIds)
 	if err != nil {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 
-	err = tx.SelectContext(ctx, &conditionList, sql, params)
+	conditionList := []IsuCondition{}
+	err = tx.SelectContext(ctx, &conditionList, query, params...)
 	if err != nil {
 		return c.NoContent(http.StatusInternalServerError)
 	}
