@@ -1186,7 +1186,11 @@ func getIsuConditionsByIsuUUIDs(ctx context.Context, jiaIsuUUIDs []string) (map[
 	if err := db.SelectContext(ctx, &conditions, query, args...); err != nil {
 		return nil, fmt.Errorf("cannot select isu_condition: %w", err)
 	}
-	return nil, nil
+	ret := map[string][]IsuCondition{}
+	for _, cond := range conditions {
+		ret[cond.JIAIsuUUID] = append(ret[cond.JIAIsuUUID], cond)
+	}
+	return ret, nil
 }
 
 // POST /api/condition/:jia_isu_uuid
