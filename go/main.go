@@ -1023,30 +1023,33 @@ func getIsuConditions(c echo.Context) error {
 func getIsuConditionsFromDB(ctx context.Context, db *sqlx.DB, jiaIsuUUID string, endTime time.Time, conditionLevel map[string]interface{}, startTime time.Time,
 	limit int, isuName string) ([]*GetIsuConditionResponse, error) {
 
-	conditions := []IsuCondition{}
+	var conditions []IsuCondition
 	var err error
 
 	if startTime.IsZero() {
 		err = db.SelectContext(ctx, &conditions,
 			"SELECT * FROM `isu_condition` WHERE `jia_isu_uuid` = ?"+
 				"	AND `timestamp` < ?"+
-				"	ORDER BY `timestamp` DESC",
-			jiaIsuUUID, endTime,
+				"	ORDER BY `timestamp` DESC LIMIT ?",
+			jiaIsuUUID, endTime, limit,
 		)
 	} else {
 		err = db.SelectContext(ctx, &conditions,
 			"SELECT * FROM `isu_condition` WHERE `jia_isu_uuid` = ?"+
 				"	AND `timestamp` < ?"+
 				"	AND ? <= `timestamp`"+
-				"	ORDER BY `timestamp` DESC",
-			jiaIsuUUID, endTime, startTime,
+				"	ORDER BY `timestamp` DESC LIMIT ?",
+			jiaIsuUUID, endTime, startTime, limit,
 		)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("db error: %v", err)
 	}
+	if len(conditions) == 0 {
+		return []*GetIsuConditionResponse{}, nil
+	}
 
-	conditionsResponse := []*GetIsuConditionResponse{}
+	conditionsResponse := make([]*GetIsuConditionResponse, 0, len(conditions))
 	for _, c := range conditions {
 		cLevel, err := calculateConditionLevel(c.Condition)
 		if err != nil {
@@ -1065,10 +1068,6 @@ func getIsuConditionsFromDB(ctx context.Context, db *sqlx.DB, jiaIsuUUID string,
 			}
 			conditionsResponse = append(conditionsResponse, &data)
 		}
-	}
-
-	if len(conditionsResponse) > limit {
-		conditionsResponse = conditionsResponse[:limit]
 	}
 
 	return conditionsResponse, nil
