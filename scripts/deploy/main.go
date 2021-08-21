@@ -125,34 +125,28 @@ func run() error {
 }
 
 func newBuildTask() task {
-	t := newSimpleCommandTask("make", "isuumo_linux_amd64")
-	t.dir = "./webapp/go"
+	t := newSimpleCommandTask("make", "app_linux_amd64")
 	return t
 }
 
 func newDeployTask(target string) task {
-	panic(errors.New("not started yet ..."))
-	if false {
-		return &seqTasks{
-			loggingTask(func(_ context.Context) {
-				log.Printf("start deploy to %s", target)
-			}),
-			// env.sh
-			newSimpleCommandTask("rsync", rsyncArgs("./env.sh", fmt.Sprintf("%s:env.sh", target))...),
-			// 初期データ消えるので --delete 付けていない
-			newSimpleCommandTask("rsync", rsyncArgs("./webapp/mysql/", fmt.Sprintf("%s:isuumo/webapp/mysql/", target))...),
-			// go.mod消えるので --delete 付けていない
-			newSimpleCommandTask("rsync", rsyncArgs("./go.mod", fmt.Sprintf("%s:isuumo/webapp/go/", target))...),
-			newSimpleCommandTask("rsync", rsyncArgs("./go.sum", fmt.Sprintf("%s:isuumo/webapp/go/", target))...),
-			newSimpleCommandTask("rsync", rsyncArgs("./webapp/go/", fmt.Sprintf("%s:isuumo/webapp/go/", target))...),
-			newSimpleCommandTask("ssh", "-n", target, "sudo", "-u", "isucon", "-i", "mv", "isuumo/webapp/go/isuumo_linux_amd64", "isuumo/webapp/go/isuumo"),
-			// 再起動 & ステータス表示
-			newSimpleCommandTask("ssh", "-n", target, "sudo", "systemctl", "restart", "isuumo.go"),
-			newSimpleCommandTask("ssh", "-n", target, "sudo", "systemctl", "status", "isuumo.go"),
-			loggingTask(func(_ context.Context) {
-				log.Printf("DONE: deploy to %s", target)
-			}),
-		}
+	return &seqTasks{
+		loggingTask(func(_ context.Context) {
+			log.Printf("start deploy to %s", target)
+		}),
+		// 初期データ消えるので --delete 付けていない
+		newSimpleCommandTask("rsync", rsyncArgs("./sql/", fmt.Sprintf("%s:webapp/mysql/", target))...),
+		// go.mod消えるので --delete 付けていない
+		newSimpleCommandTask("rsync", rsyncArgs("./go.mod", fmt.Sprintf("%s:webapp/go/", target))...),
+		newSimpleCommandTask("rsync", rsyncArgs("./go.sum", fmt.Sprintf("%s:webapp/go/", target))...),
+		newSimpleCommandTask("rsync", rsyncArgs("./go/", fmt.Sprintf("%s:webapp/go/", target))...),
+		newSimpleCommandTask("ssh", "-n", target, "sudo", "-u", "isucon", "-i", "mv", "webapp/go/app_linux_amd64", "webapp/go/isucondition"),
+		// 再起動 & ステータス表示
+		newSimpleCommandTask("ssh", "-n", target, "sudo", "systemctl", "restart", "isucondition.go.service"),
+		newSimpleCommandTask("ssh", "-n", target, "sudo", "systemctl", "status", "isucondition.go.service"),
+		loggingTask(func(_ context.Context) {
+			log.Printf("DONE: deploy to %s", target)
+		}),
 	}
 }
 
