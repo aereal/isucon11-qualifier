@@ -52,6 +52,13 @@ var (
 	postIsuConditionTargetBaseURL string // JIAへのactivate時に登録する，ISUがconditionを送る先のURL
 )
 
+var numToLevel = map[int]string{
+	0: conditionLevelInfo,
+	1: conditionLevelWarning,
+	2: conditionLevelWarning,
+	3: conditionLevelCritical,
+}
+
 type Config struct {
 	Name string `db:"name"`
 	URL  string `db:"url"`
@@ -501,7 +508,7 @@ func getIsuList(c echo.Context) error {
 
 		var formattedCondition *GetIsuConditionResponse
 		if foundLastCondition {
-			conditionLevel, err := calculateConditionLevel(lastCondition.Condition)
+			conditionLevel, err := calculateConditionLevel(lastCondition)
 			if err != nil {
 				c.Logger().Error(err)
 				return c.NoContent(http.StatusInternalServerError)
@@ -1052,7 +1059,7 @@ func getIsuConditionsFromDB(ctx context.Context, db *sqlx.DB, jiaIsuUUID string,
 
 	conditionsResponse := []*GetIsuConditionResponse{}
 	for _, c := range conditions {
-		cLevel, err := calculateConditionLevel(c.Condition)
+		cLevel, err := calculateConditionLevel(c)
 		if err != nil {
 			continue
 		}
@@ -1079,22 +1086,11 @@ func getIsuConditionsFromDB(ctx context.Context, db *sqlx.DB, jiaIsuUUID string,
 }
 
 // ISUのコンディションの文字列からコンディションレベルを計算
-func calculateConditionLevel(condition string) (string, error) {
-	var conditionLevel string
-
-	warnCount := strings.Count(condition, "=true")
-	switch warnCount {
-	case 0:
-		conditionLevel = conditionLevelInfo
-	case 1, 2:
-		conditionLevel = conditionLevelWarning
-	case 3:
-		conditionLevel = conditionLevelCritical
-	default:
-		return "", fmt.Errorf("unexpected warn count")
+func calculateConditionLevel(condition IsuCondition) (string, error) {
+	if level, ok := numToLevel[condition.ConditionLevel]; ok {
+		return level, nil
 	}
-
-	return conditionLevel, nil
+	return "", fmt.Errorf("unexpected warn count")
 }
 
 // GET /api/trend
@@ -1137,7 +1133,7 @@ func getTrend(c echo.Context) error {
 
 			if len(conditions) > 0 {
 				isuLastCondition := conditions[0]
-				conditionLevel, err := calculateConditionLevel(isuLastCondition.Condition)
+				conditionLevel, err := calculateConditionLevel(isuLastCondition)
 				if err != nil {
 					c.Logger().Error(err)
 					return c.NoContent(http.StatusInternalServerError)
