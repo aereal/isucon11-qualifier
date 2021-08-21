@@ -1208,7 +1208,7 @@ func postIsuCondition(c echo.Context) error {
 		}
 	}
 
-	go insertIsuConditions(ctx, c.Logger(), req, jiaIsuUUID)
+	go insertIsuConditions(context.Background(), c.Logger(), req, jiaIsuUUID)
 
 	return c.NoContent(http.StatusAccepted)
 }
@@ -1217,6 +1217,7 @@ func insertIsuConditions(ctx context.Context, logger echo.Logger, conditions []P
 	tx, err := db.BeginTxx(ctx, nil)
 	if err != nil {
 		logger.Errorf("insertIsuConditions: failed to begin tx: %v", err)
+		return
 	}
 	defer tx.Rollback()
 
