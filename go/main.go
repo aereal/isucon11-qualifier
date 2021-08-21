@@ -492,7 +492,8 @@ func getIsuList(c echo.Context) error {
 	}
 
 	conditionList := []IsuCondition{}
-	err = tx.SelectContext(ctx, &conditionList, "SELECT MAX(`id`) FROM `isu_condition` WHERE `jia_isu_uuid` IN (?) GROUP BY `jia_isu_uuid`", isuIds)
+	sql, params, err := sqlx.In("SELECT MAX(`id`) FROM `isu_condition` WHERE `jia_isu_uuid` IN (?) GROUP BY `jia_isu_uuid`", isuIds)
+	err = tx.SelectContext(ctx, &conditionList, sql, params)
 	if err != nil {
 		return c.NoContent(http.StatusInternalServerError)
 	}
