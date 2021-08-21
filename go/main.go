@@ -485,19 +485,23 @@ func getIsuList(c echo.Context) error {
 	}
 
 	responseList := []GetIsuListResponse{}
+
+	isuIds := make([]int, 0, len(isuList))
 	for _, isu := range isuList {
-		var lastCondition IsuCondition
-		foundLastCondition := true
-		err = tx.GetContext(ctx, &lastCondition, "SELECT * FROM `isu_condition` WHERE `jia_isu_uuid` = ? ORDER BY `timestamp` DESC LIMIT 1",
-			isu.JIAIsuUUID)
-		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				foundLastCondition = false
-			} else {
-				c.Logger().Errorf("db error: %v", err)
-				return c.NoContent(http.StatusInternalServerError)
-			}
-		}
+		isuIds = append(isuIds, isu.ID)
+	}
+
+	conditionList := []IsuCondition{}
+	err = tx.SelectContext(ctx, &conditionList, "SELECT MAX(`id`) FROM `isu_condition` WHERE `jia_isu_uuid` IN (?) GROUP BY `jia_isu_uuid`", isuIds)
+	if err != nil {
+		return c.NoContent(http.StatusInternalServerError)
+	}
+
+	uuidToCond := map[string]IsuCondition{}
+
+	for _, isu := range isuList {
+		lastCondition, ok := uuidToCond[isu.JIAIsuUUID]
+		foundLastCondition := ok
 
 		var formattedCondition *GetIsuConditionResponse
 		if foundLastCondition {
