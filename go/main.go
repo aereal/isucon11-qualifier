@@ -90,6 +90,15 @@ type IsuCondition struct {
 	CreatedAt  time.Time `db:"created_at"`
 }
 
+// "	(`jia_isu_uuid`, `timestamp`, `is_sitting`, `condition`, `message`)"+
+type insertIsuRow struct {
+	JIAIsuUUID string    `db:"jia_isu_uuid"`
+	Timestamp  time.Time `db:"timestamp"`
+	IsSitting  bool      `db:"is_sitting"`
+	Condition  string    `db:"condition"`
+	Message    string    `db:"message"`
+}
+
 type MySQLConnectionEnv struct {
 	Host     string
 	Port     string
@@ -1214,31 +1223,38 @@ func postIsuCondition(c echo.Context) error {
 }
 
 func insertIsuConditions(ctx context.Context, logger echo.Logger, conditions []PostIsuConditionRequest, jiaIsuUUID string) {
-	tx, err := db.BeginTxx(ctx, nil)
-	if err != nil {
-		logger.Errorf("insertIsuConditions: failed to begin tx: %v", err)
-		return
-	}
-	defer tx.Rollback()
-
-	for _, cond := range conditions {
+	rows := make([]insertIsuRow, len(conditions))
+	for i, cond := range conditions {
 		// 呼び出し元でチェックしているのでここではチェックしない
 		// if !isValidConditionFormat(cond.Condition) {
 		// 	return
 		// }
 
 		timestamp := time.Unix(cond.Timestamp, 0)
-		_, err = tx.ExecContext(
-			ctx,
-			"INSERT INTO `isu_condition`"+
-				"	(`jia_isu_uuid`, `timestamp`, `is_sitting`, `condition`, `message`)"+
-				"	VALUES (?, ?, ?, ?, ?)",
-			jiaIsuUUID, timestamp, cond.IsSitting, cond.Condition, cond.Message)
-		if err != nil {
-			logger.Errorf("insertIsuConditions: failed to insert: %v", err)
-			return
+		rows[i] = insertIsuRow{
+			JIAIsuUUID: jiaIsuUUID,
+			Timestamp:  timestamp,
+			IsSitting:  cond.IsSitting,
+			Condition:  cond.Condition,
+			Message:    cond.Message,
 		}
-
+	}
+	tx, err := db.BeginTxx(ctx, nil)
+	if err != nil {
+		logger.Errorf("insertIsuConditions: failed to begin tx: %v", err)
+		return
+	}
+	defer tx.Rollback()
+	_, err = tx.NamedExecContext(
+		ctx,
+		"INSERT INTO `isu_condition`"+
+			"	(`jia_isu_uuid`, `timestamp`, `is_sitting`, `condition`, `message`)"+
+			"	VALUES (:jia_isu_uuid, :timestamp, :is_sitting, :condition, :message)",
+		rows,
+	)
+	if err != nil {
+		logger.Errorf("insertIsuConditions: failed to insert: %v", err)
+		return
 	}
 
 	if err := tx.Commit(); err != nil {
