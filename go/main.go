@@ -1187,8 +1187,6 @@ func getTrend(c echo.Context) error {
 	return c.JSON(http.StatusOK, res)
 }
 
-// POST /api/condition/:jia_isu_uuid
-// ISUからのコンディションを受け取る
 var isuExistanceCacheGroup singleflight.Group
 var isuExistanceSet = map[string]struct{}{}
 
@@ -1208,6 +1206,8 @@ func checkIsuExists(ctx context.Context, jiaIsuUUID string) (bool, error) {
 	return exists.(bool), err
 }
 
+// POST /api/condition/:jia_isu_uuid
+// ISUからのコンディションを受け取る
 func postIsuCondition(c echo.Context) error {
 	ctx := c.Request().Context()
 
