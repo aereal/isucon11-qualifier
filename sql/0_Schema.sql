@@ -23,6 +23,9 @@ CREATE TABLE `isu_condition` (
   `condition` VARCHAR(255) NOT NULL,
   `message` VARCHAR(255) NOT NULL,
   `created_at` DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6),
+  `is_dirty` TINYINT(1) AS (`condition` REGEXP 'is_dirty=true') STORED NOT NULL,
+  `is_overweight` TINYINT(1) AS (`condition` REGEXP 'is_overweight=true') STORED NOT NULL,
+  `is_broken` TINYINT(1) AS (`condition` REGEXP 'is_broken=true') STORED NOT NULL,
   KEY `timestamp_desc_jia_isu_uuid_idx` (`timestamp` DESC, `jia_isu_uuid`),
   KEY `timestamp_asc_jia_isu_uuid_idx` (`timestamp`, `jia_isu_uuid`),
   PRIMARY KEY(`id`)
