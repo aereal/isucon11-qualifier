@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
@@ -348,7 +349,7 @@ func postInitialize(c echo.Context) error {
 
 	// reset all
 	isuExistanceCacheGroup = singleflight.Group{}
-	isuExistanceSet = map[string]struct{}{}
+	isuExistanceSet = sync.Map{}
 
 	return c.JSON(http.StatusOK, InitializeResponse{
 		Language: "go",
@@ -1217,18 +1218,18 @@ func getTrend(c echo.Context) error {
 }
 
 var isuExistanceCacheGroup singleflight.Group
-var isuExistanceSet = map[string]struct{}{}
+var isuExistanceSet sync.Map
 
 func checkIsuExists(ctx context.Context, jiaIsuUUID string) (bool, error) {
 	exists, err, _ := isuExistanceCacheGroup.Do(jiaIsuUUID, func() (interface{}, error) {
-		if _, ok := isuExistanceSet[jiaIsuUUID]; ok {
+		if _, ok := isuExistanceSet.Load(jiaIsuUUID); ok {
 			return true, nil
 		}
 
 		var count int
 		err := db.GetContext(ctx, &count, "SELECT 1 FROM `isu` WHERE `jia_isu_uuid` = ? LIMIT 1", jiaIsuUUID)
 		if count == 1 {
-			isuExistanceSet[jiaIsuUUID] = struct{}{}
+			isuExistanceSet.Store(jiaIsuUUID, struct{}{})
 		}
 		return count == 0, err
 	})
