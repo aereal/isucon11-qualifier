@@ -1178,12 +1178,12 @@ func getTrend(c echo.Context) error {
 
 func getIsuConditionsByIsuUUIDs(ctx context.Context, jiaIsuUUIDs []string) (map[string][]IsuCondition, error) {
 	conditions := []IsuCondition{}
-	query, arg, err := sqlx.In("SELECT * FROM `isu_condition` WHERE `jia_isu_uuid` IN (?) ORDER BY timestamp DESC", jiaIsuUUIDs)
+	query, args, err := sqlx.In("SELECT * FROM `isu_condition` WHERE `jia_isu_uuid` IN (?) ORDER BY timestamp DESC", jiaIsuUUIDs)
 	if err != nil {
 		return nil, fmt.Errorf("cannot build IN query: %w", err)
 	}
 	query = db.Rebind(query)
-	if err := db.SelectContext(ctx, &conditions, query, arg); err != nil {
+	if err := db.SelectContext(ctx, &conditions, query, args...); err != nil {
 		return nil, fmt.Errorf("cannot select isu_condition: %w", err)
 	}
 	return nil, nil
