@@ -181,7 +181,8 @@ func (t *recordNewRelicDeploymentTask) Name() string {
 
 func (t *recordNewRelicDeploymentTask) Run(ctx context.Context) error {
 	if t.APIKey == "TODO" || t.AppID == "TODO" {
-		return fmt.Errorf("APIKey and AppID must be configured")
+		log.Printf("skip record new relic deployment; APIKey and AppID must be configured")
+		return nil
 	}
 	payload, err := json.Marshal(t)
 	if err != nil {
