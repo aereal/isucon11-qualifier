@@ -84,13 +84,17 @@ type GetIsuListResponse struct {
 }
 
 type IsuCondition struct {
-	ID         int       `db:"id"`
-	JIAIsuUUID string    `db:"jia_isu_uuid"`
-	Timestamp  time.Time `db:"timestamp"`
-	IsSitting  bool      `db:"is_sitting"`
-	Condition  string    `db:"condition"`
-	Message    string    `db:"message"`
-	CreatedAt  time.Time `db:"created_at"`
+	ID             int       `db:"id"`
+	JIAIsuUUID     string    `db:"jia_isu_uuid"`
+	Timestamp      time.Time `db:"timestamp"`
+	IsSitting      bool      `db:"is_sitting"`
+	Condition      string    `db:"condition"`
+	Message        string    `db:"message"`
+	CreatedAt      time.Time `db:"created_at"`
+	IsDirty        bool      `db:"is_dirty"`
+	IsOverweight   bool      `db:"is_overweight"`
+	IsBroken       bool      `db:"is_broken"`
+	ConditionLevel int       `db:"condition_level"`
 }
 
 // "	(`jia_isu_uuid`, `timestamp`, `is_sitting`, `condition`, `message`)"+
