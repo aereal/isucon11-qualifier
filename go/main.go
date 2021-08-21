@@ -912,25 +912,19 @@ func calculateGraphDataPoint(isuConditions []IsuCondition) (GraphDataPoint, erro
 	conditionsCount := map[string]int{"is_broken": 0, "is_dirty": 0, "is_overweight": 0}
 	rawScore := 0
 	for _, condition := range isuConditions {
-		badConditionsCount := 0
-
-		if !isValidConditionFormat(condition.Condition) {
-			return GraphDataPoint{}, fmt.Errorf("invalid condition format")
+		if condition.IsBroken {
+			conditionsCount["is_broken"] += 1
+		}
+		if condition.IsDirty {
+			conditionsCount["is_dirty"] += 1
+		}
+		if condition.IsOverweight {
+			conditionsCount["is_overweight"] += 1
 		}
 
-		for _, condStr := range strings.Split(condition.Condition, ",") {
-			keyValue := strings.Split(condStr, "=")
-
-			conditionName := keyValue[0]
-			if keyValue[1] == "true" {
-				conditionsCount[conditionName] += 1
-				badConditionsCount++
-			}
-		}
-
-		if badConditionsCount >= 3 {
+		if condition.ConditionLevel >= 3 {
 			rawScore += scoreConditionLevelCritical
-		} else if badConditionsCount >= 1 {
+		} else if condition.ConditionLevel >= 1 {
 			rawScore += scoreConditionLevelWarning
 		} else {
 			rawScore += scoreConditionLevelInfo
