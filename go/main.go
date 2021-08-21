@@ -1101,15 +1101,27 @@ func calculateConditionLevel(condition string) (string, error) {
 // ISUの性格毎の最新のコンディション情報
 func getTrend(c echo.Context) error {
 	ctx := c.Request().Context()
-	isus := []Isu{}
-	if err := db.SelectContext(ctx, &isus, "SELECT * FROM `isu`"); err != nil {
+	allIsus := []Isu{}
+	if err := db.SelectContext(ctx, &allIsus, "SELECT * FROM `isu`"); err != nil {
 		c.Logger().Errorf("failed to select all isu: %v", err)
 		return c.NoContent(http.StatusInternalServerError)
 	}
 	// character => []Isu
 	isusByCharacter := map[string][]Isu{}
-	for _, isu := range isus {
+	// jiaIsuUUID => existence: bool
+	jiaIsuUUIDsSet := map[string]bool{}
+	for _, isu := range allIsus {
 		isusByCharacter[isu.Character] = append(isusByCharacter[isu.Character], isu)
+		jiaIsuUUIDsSet[isu.JIAIsuUUID] = true
+	}
+	jiaIsuUUIDs := []string{}
+	for jiaIsuUUID := range jiaIsuUUIDsSet {
+		jiaIsuUUIDs = append(jiaIsuUUIDs, jiaIsuUUID)
+	}
+	ret, err := getIsuConditionsByIsuUUIDs(ctx, jiaIsuUUIDs)
+	if err != nil {
+		c.Logger().Errorf("failed to select isu conditions: %v", err)
+		return c.NoContent(http.StatusInternalServerError)
 	}
 
 	res := []TrendResponse{}
@@ -1119,16 +1131,7 @@ func getTrend(c echo.Context) error {
 		characterWarningIsuConditions := []*TrendCondition{}
 		characterCriticalIsuConditions := []*TrendCondition{}
 		for _, isu := range isuList {
-			conditions := []IsuCondition{}
-			err := db.SelectContext(ctx, &conditions,
-				"SELECT * FROM `isu_condition` WHERE `jia_isu_uuid` = ? ORDER BY timestamp DESC",
-				isu.JIAIsuUUID,
-			)
-			if err != nil {
-				c.Logger().Errorf("db error: %v", err)
-				return c.NoContent(http.StatusInternalServerError)
-			}
-
+			conditions := ret[isu.JIAIsuUUID]
 			if len(conditions) > 0 {
 				isuLastCondition := conditions[0]
 				conditionLevel, err := calculateConditionLevel(isuLastCondition.Condition)
@@ -1171,6 +1174,19 @@ func getTrend(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, res)
+}
+
+func getIsuConditionsByIsuUUIDs(ctx context.Context, jiaIsuUUIDs []string) (map[string][]IsuCondition, error) {
+	conditions := []IsuCondition{}
+	query, arg, err := sqlx.In("SELECT * FROM `isu_condition` WHERE `jia_isu_uuid` IN (?) ORDER BY timestamp DESC", jiaIsuUUIDs)
+	if err != nil {
+		return nil, fmt.Errorf("cannot build IN query: %w", err)
+	}
+	query = db.Rebind(query)
+	if err := db.SelectContext(ctx, &conditions, query, arg); err != nil {
+		return nil, fmt.Errorf("cannot select isu_condition: %w", err)
+	}
+	return nil, nil
 }
 
 // POST /api/condition/:jia_isu_uuid
