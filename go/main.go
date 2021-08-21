@@ -1167,11 +1167,11 @@ func getTrend(c echo.Context) error {
 				Timestamp: el.Timestamp.Unix(),
 			}
 			switch el.ConditionLevel {
-			case scoreConditionLevelInfo:
+			case 0:
 				characterInfoIsuConditions = append(characterInfoIsuConditions, &trendCondition)
-			case scoreConditionLevelWarning:
+			case 1, 2:
 				characterWarningIsuConditions = append(characterWarningIsuConditions, &trendCondition)
-			case scoreConditionLevelCritical:
+			case 3:
 				characterCriticalIsuConditions = append(characterCriticalIsuConditions, &trendCondition)
 			}
 		}
