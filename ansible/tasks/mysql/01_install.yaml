@@ -26,18 +26,17 @@
     remote_src: yes
   when: mysql_uninstall and mysql_etc_dir.stat.exists
 
-- name: uninstall official mysql server
+- name: uninstall mariadb server
   apt:
     name:
-      - mysql-common
-      - mysql-client
-      - mysql-server
-      - mysql-community-server
-      - libmysqlclient-dev
+      - mariadb-common
+      - mariadb-client
+      - mariadb-server
+      - libmariadbclient-dev
     state: absent
     update_cache: yes
     cache_valid_time: 90
-  when: not use_community_mysql and mysql_uninstall
+  when: use_community_mysql and mysql_uninstall
 
 - name: uninstall community mysql server
   apt:
