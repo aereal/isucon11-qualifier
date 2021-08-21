@@ -19,7 +19,7 @@ var (
 	slackWebhookURL                     = "https://hooks.slack.com/services/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"
 	newrelicRecordDeploymentURLTemplate = "https://api.newrelic.com/v2/applications/%s/deployments.json"
 	newrelicAppID                       = "TODO"
-	newrelicAPIKey                      = "TODO"
+	newrelicAPIKey                      = "459379558858587ddcde210a48cb54c34f39NRAL"
 	osUserMapping                       = map[string]*userInfo{
 		"aereal":             {githubID: 87649, slackID: "U0289QVBV8S"},
 		"kenta.sato":         {githubID: 374550, slackID: "U028G2PV9FW"},
