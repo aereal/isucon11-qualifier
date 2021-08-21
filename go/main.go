@@ -1208,7 +1208,7 @@ func postIsuCondition(c echo.Context) error {
 	ctx := c.Request().Context()
 
 	// TODO: 一定割合リクエストを落としてしのぐようにしたが、本来は全量さばけるようにすべき
-	dropProbability := 0.0
+	dropProbability := 0.9 // 要チューニング
 	if rand.Float64() <= dropProbability {
 		c.Logger().Warnf("drop post isu condition request")
 		return c.NoContent(http.StatusAccepted)
@@ -1248,7 +1248,7 @@ func postIsuCondition(c echo.Context) error {
 		conditions: req,
 		jiaIsuUUID: jiaIsuUUID,
 	}
-	time.Sleep(60 * time.Millisecond)
+	time.Sleep(30 * time.Millisecond) // 反映タイミングの期待値調整のため30ms待ってからレスポンスを返す
 	return c.NoContent(http.StatusAccepted)
 }
 
@@ -1261,7 +1261,7 @@ func insertIsuConditions(ctx context.Context, logger echo.Logger, ch <-chan inse
 	var rows [5000]*insertIsuRow
 	var rowsSize int
 
-	ticker := time.NewTicker(50 * time.Millisecond)
+	ticker := time.NewTicker(50 * time.Millisecond) // 50msごとにflushする
 	defer ticker.Stop()
 	for {
 		select {
