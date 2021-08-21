@@ -986,7 +986,7 @@ func getIsuConditions(c echo.Context) error {
 	if conditionLevelCSV == "" {
 		return c.String(http.StatusBadRequest, "missing: condition_level")
 	}
-	conditionLevel := map[string]interface{}{}
+	conditionLevel := map[string]struct{}{}
 	for _, level := range strings.Split(conditionLevelCSV, ",") {
 		conditionLevel[level] = struct{}{}
 	}
@@ -1024,27 +1024,35 @@ func getIsuConditions(c echo.Context) error {
 }
 
 // ISUのコンディションをDBから取得
-func getIsuConditionsFromDB(ctx context.Context, db *sqlx.DB, jiaIsuUUID string, endTime time.Time, conditionLevel map[string]interface{}, startTime time.Time,
+func getIsuConditionsFromDB(ctx context.Context, db *sqlx.DB, jiaIsuUUID string, endTime time.Time, conditionLevel map[string]struct{}, startTime time.Time,
 	limit int, isuName string) ([]*GetIsuConditionResponse, error) {
 
 	var conditions []IsuCondition
 	var err error
 
 	if startTime.IsZero() {
-		err = db.SelectContext(ctx, &conditions,
-			"SELECT * FROM `isu_condition` WHERE `jia_isu_uuid` = ?"+
-				"	AND `timestamp` < ?"+
-				"	ORDER BY `timestamp` DESC LIMIT ?",
-			jiaIsuUUID, endTime, limit,
-		)
+		var sql string
+		var params []interface{}
+		sql, params, err = sqlx.In("SELECT * FROM `isu_condition` WHERE `jia_isu_uuid` = ?"+
+			"	AND `timestamp` < ? AND condition_level IN (?)"+
+			"	ORDER BY `timestamp` DESC LIMIT ?",
+			jiaIsuUUID, endTime, calculateNumericConditionLevels(conditionLevel), limit)
+		if err != nil {
+			log.Fatal(err)
+		}
+		err = db.SelectContext(ctx, &conditions, sql, params...)
 	} else {
-		err = db.SelectContext(ctx, &conditions,
-			"SELECT * FROM `isu_condition` WHERE `jia_isu_uuid` = ?"+
-				"	AND `timestamp` < ?"+
-				"	AND ? <= `timestamp`"+
-				"	ORDER BY `timestamp` DESC LIMIT ?",
-			jiaIsuUUID, endTime, startTime, limit,
-		)
+		var sql string
+		var params []interface{}
+		sql, params, err = sqlx.In("SELECT * FROM `isu_condition` WHERE `jia_isu_uuid` = ?"+
+			"	AND `timestamp` < ?"+
+			"	AND ? <= `timestamp` AND condition_level IN (?)"+
+			"	ORDER BY `timestamp` DESC LIMIT ?",
+			jiaIsuUUID, endTime, startTime, calculateNumericConditionLevels(conditionLevel), limit)
+		if err != nil {
+			log.Fatal(err)
+		}
+		err = db.SelectContext(ctx, &conditions, sql, params...)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("db error: %v", err)
@@ -1053,24 +1061,21 @@ func getIsuConditionsFromDB(ctx context.Context, db *sqlx.DB, jiaIsuUUID string,
 		return []*GetIsuConditionResponse{}, nil
 	}
 
-	conditionsResponse := make([]*GetIsuConditionResponse, 0, len(conditions))
-	for _, c := range conditions {
-		cLevel, err := calculateConditionLevel(c.Condition)
+	conditionsResponse := make([]*GetIsuConditionResponse, len(conditions))
+	for i, c := range conditions {
+		condLevel, err := formatConditionLevel(c.ConditionLevel)
 		if err != nil {
-			continue
+			return nil, err
 		}
 
-		if _, ok := conditionLevel[cLevel]; ok {
-			data := GetIsuConditionResponse{
-				JIAIsuUUID:     c.JIAIsuUUID,
-				IsuName:        isuName,
-				Timestamp:      c.Timestamp.Unix(),
-				IsSitting:      c.IsSitting,
-				Condition:      c.Condition,
-				ConditionLevel: cLevel,
-				Message:        c.Message,
-			}
-			conditionsResponse = append(conditionsResponse, &data)
+		conditionsResponse[i] = &GetIsuConditionResponse{
+			JIAIsuUUID:     c.JIAIsuUUID,
+			IsuName:        isuName,
+			Timestamp:      c.Timestamp.Unix(),
+			IsSitting:      c.IsSitting,
+			Condition:      c.Condition,
+			ConditionLevel: condLevel,
+			Message:        c.Message,
 		}
 	}
 
@@ -1079,21 +1084,45 @@ func getIsuConditionsFromDB(ctx context.Context, db *sqlx.DB, jiaIsuUUID string,
 
 // ISUのコンディションの文字列からコンディションレベルを計算
 func calculateConditionLevel(condition string) (string, error) {
-	var conditionLevel string
-
 	warnCount := strings.Count(condition, "=true")
+	return formatConditionLevel(warnCount)
+}
+
+// ISUのコンディションの文字列からコンディションレベルを計算
+func formatConditionLevel(warnCount int) (string, error) {
 	switch warnCount {
 	case 0:
-		conditionLevel = conditionLevelInfo
+		return conditionLevelInfo, nil
 	case 1, 2:
-		conditionLevel = conditionLevelWarning
+		return conditionLevelWarning, nil
 	case 3:
-		conditionLevel = conditionLevelCritical
+		return conditionLevelCritical, nil
 	default:
 		return "", fmt.Errorf("unexpected warn count")
 	}
+}
 
-	return conditionLevel, nil
+// ISUのコンディションレベルから数値のコンディションレベルを計算
+func calculateNumericConditionLevels(levelsMap map[string]struct{}) (conditionLevels []int) {
+	seen := map[string]struct{}{}
+
+	for level := range levelsMap {
+		if _, ok := seen[level]; ok {
+			continue
+		}
+
+		switch level {
+		case conditionLevelInfo:
+			conditionLevels = append(conditionLevels, 0)
+		case conditionLevelWarning:
+			conditionLevels = append(conditionLevels, 1, 2)
+		case conditionLevelCritical:
+			conditionLevels = append(conditionLevels, 3)
+		}
+		seen[level] = struct{}{}
+	}
+
+	return conditionLevels, nil
 }
 
 // GET /api/trend
