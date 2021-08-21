@@ -499,6 +499,9 @@ func getIsuList(c echo.Context) error {
 	}
 
 	uuidToCond := map[string]IsuCondition{}
+	for _, cond := range conditionList {
+		uuidToCond[cond.JIAIsuUUID] = cond
+	}
 
 	for _, isu := range isuList {
 		lastCondition, ok := uuidToCond[isu.JIAIsuUUID]
