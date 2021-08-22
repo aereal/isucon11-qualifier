@@ -76,47 +76,47 @@ func run() error {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	revision, err := getDescriptiveRevision()
-	if err != nil {
-		return err
-	}
-	revSha, err := getSha()
-	if err != nil {
-		return err
-	}
-	branch, err := getCurrentBranch()
-	if err != nil {
-		return err
-	}
-	commitMsg, err := getCommitMessage()
-	if err != nil {
-		return err
-	}
-	fullName, err := parseGitHubRepoFromRemoteURL("origin")
-	if err != nil {
-		return err
-	}
-	user := os.Getenv("USER")
+	// revision, err := getDescriptiveRevision()
+	// if err != nil {
+	//  	return err
+	// }
+	// revSha, err := getSha()
+	// if err != nil {
+	//  	return err
+	// }
+	// branch, err := getCurrentBranch()
+	// if err != nil {
+	//  	return err
+	// }
+	// commitMsg, err := getCommitMessage()
+	// if err != nil {
+	//  	return err
+	// }
+	// fullName, err := parseGitHubRepoFromRemoteURL("origin")
+	// if err != nil {
+	//  	return err
+	// }
+	// user := os.Getenv("USER")
 	workflow := &seqTasks{
 		newBuildTask(),
-		newDeploySlackNotification("Start deploy", user, fullName, revision, revSha, branch, targets),
+		// newDeploySlackNotification("Start deploy", user, fullName, revision, revSha, branch, targets),
 	}
 	deployTasks := &parallelTask{}
 	for _, target := range targets {
 		deployTasks.Add(newDeployTask(target))
 	}
 	workflow.Add(deployTasks)
-	workflow.Add(newDeploySlackNotification("Finished deploy", user, fullName, revision, revSha, branch, targets))
-	workflow.Add(&recordNewRelicDeploymentTask{
-		AppID:  newrelicAppID,
-		APIKey: newrelicAPIKey,
-		Payload: &nrDeployment{
-			Revision:    revision,
-			Changelog:   fmt.Sprintf("%s deployed %s: %s", user, revision, commitMsg),
-			Description: fmt.Sprintf("%s deployed %s: %s", user, revision, commitMsg),
-			User:        user,
-		},
-	})
+	// workflow.Add(newDeploySlackNotification("Finished deploy", user, fullName, revision, revSha, branch, targets))
+	// workflow.Add(&recordNewRelicDeploymentTask{
+	//  	AppID:  newrelicAppID,
+	//  	APIKey: newrelicAPIKey,
+	//  	Payload: &nrDeployment{
+	//  		Revision:    revision,
+	//  		Changelog:   fmt.Sprintf("%s deployed %s: %s", user, revision, commitMsg),
+	//  		Description: fmt.Sprintf("%s deployed %s: %s", user, revision, commitMsg),
+	//  		User:        user,
+	//  	},
+	// })
 	if err := workflow.Run(ctx); err != nil {
 		return err
 	}

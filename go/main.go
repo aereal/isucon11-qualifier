@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -53,7 +52,7 @@ var (
 
 	postIsuConditionTargetBaseURL string // JIAへのactivate時に登録する，ISUがconditionを送る先のURL
 
-	insIsuCondArgsCh = make(chan insertIsuConditionsArgs, 1024)
+	insIsuCondArgsCh = make(chan *insertIsuRow, 5000)
 )
 
 type Config struct {
@@ -242,7 +241,18 @@ func main() {
 	e.GET("/api/isu/:jia_isu_uuid/icon", getIsuIcon)
 	e.GET("/api/isu/:jia_isu_uuid/graph", getIsuGraph)
 	e.GET("/api/condition/:jia_isu_uuid", getIsuConditions)
-	e.GET("/api/trend", getTrend)
+
+	var requestGroup singleflight.Group
+	e.GET("/api/trend", func(c echo.Context) error {
+		res, err, _ := requestGroup.Do(c.Request().URL.String(), func() (interface{}, error) {
+			return getTrend(c)
+		})
+		if err != nil {
+			return c.NoContent(http.StatusInternalServerError)
+		}
+
+		return c.JSON(http.StatusOK, res)
+	})
 
 	e.POST("/api/condition/:jia_isu_uuid", postIsuCondition)
 
@@ -1144,13 +1154,13 @@ type trendElement struct {
 
 // GET /api/trend
 // ISUの性格毎の最新のコンディション情報
-func getTrend(c echo.Context) error {
-	ctx := c.Request().Context()
+func getTrend(c echo.Context) ([]TrendResponse, error) {
+	ctx := context.Background()
 	trendEls := []trendElement{}
-	query := "select isu_condition.timestamp, isu.id, isu.character, isu_condition.condition_level from isu_condition inner join isu on isu.jia_isu_uuid = isu_condition.jia_isu_uuid order by isu_condition.timestamp desc"
+	query := "select isu_condition.timestamp, isu.id, isu.character, isu_condition.condition_level from isu_condition FORCE INDEX (timestamp_desc_jia_isu_uuid_idx) inner join isu on isu.jia_isu_uuid = isu_condition.jia_isu_uuid order by isu_condition.timestamp desc"
 	if err := db.SelectContext(ctx, &trendEls, query); err != nil {
 		c.Logger().Errorf("failed to select isu_condition: %v", err)
-		return c.NoContent(http.StatusInternalServerError)
+		return nil, err
 	}
 	byCharacter := map[string][]trendElement{}
 	for _, x := range trendEls {
@@ -1158,11 +1168,17 @@ func getTrend(c echo.Context) error {
 	}
 	res := []TrendResponse{}
 
+	seen := map[int]struct{}{}
 	for character, els := range byCharacter {
 		characterInfoIsuConditions := []*TrendCondition{}
 		characterWarningIsuConditions := []*TrendCondition{}
 		characterCriticalIsuConditions := []*TrendCondition{}
 		for _, el := range els {
+			if _, skip := seen[el.IsuID]; skip {
+				continue
+			}
+			seen[el.IsuID] = struct{}{}
+
 			trendCondition := TrendCondition{
 				ID:        el.IsuID,
 				Timestamp: el.Timestamp.Unix(),
@@ -1177,15 +1193,6 @@ func getTrend(c echo.Context) error {
 			}
 		}
 
-		sort.Slice(characterInfoIsuConditions, func(i, j int) bool {
-			return characterInfoIsuConditions[i].Timestamp > characterInfoIsuConditions[j].Timestamp
-		})
-		sort.Slice(characterWarningIsuConditions, func(i, j int) bool {
-			return characterWarningIsuConditions[i].Timestamp > characterWarningIsuConditions[j].Timestamp
-		})
-		sort.Slice(characterCriticalIsuConditions, func(i, j int) bool {
-			return characterCriticalIsuConditions[i].Timestamp > characterCriticalIsuConditions[j].Timestamp
-		})
 		res = append(res,
 			TrendResponse{
 				Character: character,
@@ -1195,7 +1202,7 @@ func getTrend(c echo.Context) error {
 			})
 	}
 
-	return c.JSON(http.StatusOK, res)
+	return res, nil
 }
 
 var isuExistanceCacheGroup singleflight.Group
@@ -1211,8 +1218,10 @@ func checkIsuExists(ctx context.Context, jiaIsuUUID string) (bool, error) {
 		err := db.GetContext(ctx, &count, "SELECT 1 FROM `isu` WHERE `jia_isu_uuid` = ? LIMIT 1", jiaIsuUUID)
 		if count == 1 {
 			isuExistanceSet.Store(jiaIsuUUID, struct{}{})
+		} else if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
 		}
-		return count == 0, err
+		return false, err
 	})
 	return exists.(bool), err
 }
@@ -1223,7 +1232,7 @@ func postIsuCondition(c echo.Context) error {
 	ctx := c.Request().Context()
 
 	// TODO: 一定割合リクエストを落としてしのぐようにしたが、本来は全量さばけるようにすべき
-	dropProbability := 0.9 // 要チューニング
+	dropProbability := 0.0 // 要チューニング
 	if rand.Float64() <= dropProbability {
 		c.Logger().Warnf("drop post isu condition request")
 		return c.NoContent(http.StatusAccepted)
@@ -1257,22 +1266,22 @@ func postIsuCondition(c echo.Context) error {
 		if !isValidConditionFormat(cond.Condition) {
 			return c.String(http.StatusBadRequest, "bad request body")
 		}
+
+		timestamp := time.Unix(cond.Timestamp, 0)
+		insIsuCondArgsCh <- &insertIsuRow{
+			JIAIsuUUID: jiaIsuUUID,
+			Timestamp:  timestamp,
+			IsSitting:  cond.IsSitting,
+			Condition:  cond.Condition,
+			Message:    cond.Message,
+		}
 	}
 
-	insIsuCondArgsCh <- insertIsuConditionsArgs{
-		conditions: req,
-		jiaIsuUUID: jiaIsuUUID,
-	}
 	time.Sleep(60 * time.Millisecond) // 反映タイミングの期待値調整のため30ms待ってからレスポンスを返す
 	return c.NoContent(http.StatusAccepted)
 }
 
-type insertIsuConditionsArgs struct {
-	conditions []PostIsuConditionRequest
-	jiaIsuUUID string
-}
-
-func insertIsuConditions(ctx context.Context, logger echo.Logger, ch <-chan insertIsuConditionsArgs) {
+func insertIsuConditions(ctx context.Context, logger echo.Logger, ch <-chan *insertIsuRow) {
 	var rows [5000]*insertIsuRow
 	var rowsSize int
 
@@ -1280,26 +1289,13 @@ func insertIsuConditions(ctx context.Context, logger echo.Logger, ch <-chan inse
 	defer ticker.Stop()
 	for {
 		select {
-		case args := <-ch:
-			for _, c := range args.conditions {
-				// 呼び出し元でチェックしているのでここではチェックしない
-				// if !isValidConditionFormat(cond.Condition) {
-				// 	return
-				// }
-
-				timestamp := time.Unix(c.Timestamp, 0)
-				rows[rowsSize] = &insertIsuRow{
-					JIAIsuUUID: args.jiaIsuUUID,
-					Timestamp:  timestamp,
-					IsSitting:  c.IsSitting,
-					Condition:  c.Condition,
-					Message:    c.Message,
-				}
-				rowsSize++
-				if rowsSize == len(rows) {
-					insertIsuConditionDoit(ctx, logger, rows[:])
-					rowsSize = 0
-				}
+		case row := <-ch:
+			rows[rowsSize] = row
+			rowsSize++
+			if rowsSize == len(rows) {
+				insertIsuConditionDoit(ctx, logger, rows[:])
+				rowsSize = 0
+				ticker.Reset(50 * time.Millisecond)
 			}
 
 		case <-ticker.C:
